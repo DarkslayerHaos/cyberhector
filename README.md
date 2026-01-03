@@ -7,7 +7,7 @@
 > 
 > See each branch’s README for build and usage details.
 
-This project implements a modern hybrid encryption system written in C++ It combines **X25519** for secure session-key encapsulation and **XChaCha20-Poly1305** for authenticated encryption of file contents.  
+This project implements a modern hybrid encryption system written in Python. It combines **X25519** for secure session-key encapsulation and **XChaCha20-Poly1305** for authenticated encryption of file contents.  
 Designed for offline, single-user usage with strong cryptographic guarantees.
 
 ---
@@ -82,15 +82,15 @@ Not intended as a general-purpose or commercial encryption product.
 
 ## 📦 Dependencies
 
-### 🧩 libsodium
+### 🧩 cryptography
 Used for:
-- **X25519** (Curve25519) ECDH Key Exchange.
-- **XChaCha20-Poly1305** Authenticated Encryption (IETF variant).
-- **HMAC-SHA512** primitives for HKDF-SHA512 derivation.
-- Secure random number generation (`randombytes_buf`).
-- Constant-time memory zeroing (`sodium_memzero`).
+- X25519 (Curve25519) ECDH
+- HKDF with SHA512
+- Key serialization
 
-### 🧩 C++17 Standard Library
-Required for:
-- Filesystem operations (`std::filesystem`) to process directories and extensions.
-- Binary data management using `std::vector<unsigned char>`.
+### 🧩 PyNaCl
+Used for:
+- XChaCha20-Poly1305 AEAD
+
+### 🧩 Python 3.10+
+Required to run the CLI tool.
