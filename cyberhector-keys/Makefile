@@ -1,33 +1,50 @@
 # Final executable name
 TARGET = key_util.exe
 
-# Source files required for key unwrapping and generation
-SRCS = main.cpp crypto_core.cpp keypair_utils.cpp
+# Source files
+SRCS = main.cpp src/crypto_core.cpp src/keypair_utils.cpp
 
 # Compiler settings
 CXX = g++
 
-# CXXFLAGS updates:
-# -DSODIUM_STATIC: Required for static linking with libsodium
-# -static: Links all libraries (including system libs) statically
-# -static-libgcc -static-libstdc++: Ensures C++ runtime is embedded
-# -s: Strips symbols to significantly reduce file size (around 1.5MB final)
-CXXFLAGS = -std=c++17 -Wall -Wextra -O3 -DSODIUM_STATIC -static -static-libgcc -static-libstdc++ -s
+# --- PROTECTION & OPTIMIZATION SETTINGS ---
 
-# External libraries
-# The linker will prioritize libsodium.a over the DLL import library
+# Basic flags and Libsodium static support 
+CXXFLAGS = -std=c++17 -Wall -Wextra -O3 -DSODIUM_STATIC
+
+# Aggressive Anti-Reversing & Optimization
+# These flags hinder code flow analysis and remove metadata 
+CXXFLAGS += \
+	-fomit-frame-pointer \
+	-fno-unwind-tables \
+	-finline-functions \
+	-finline-small-functions \
+	-fipa-pta \
+	-fipa-cp \
+	-fipa-sra \
+	-fvisibility=hidden
+
+# Linker flags for a stripped, standalone binary
+# -Wl,--gc-sections: Removes unused code
+# -Wl,--strip-all: Removes all symbols and debug info
+LDFLAGS = -static -static-libgcc -static-libstdc++ \
+          -Wl,--gc-sections \
+          -Wl,--strip-all \
+          -s
+
+# External libraries 
 LIBS = -lsodium -lpthread
 
-# Default target: Compiles the standalone utility
+# --- BUILD TARGETS ---
+
 all:
 	@echo "[!] Building standalone $(TARGET)..."
-	$(CXX) $(SRCS) -o $(TARGET) $(CXXFLAGS) $(LIBS)
+	$(CXX) $(SRCS) -o $(TARGET) $(CXXFLAGS) $(LDFLAGS) $(LIBS)
 	@echo "[+] Build successful."
 
-# Clean target: Removes the utility executable
 clean:
 	@echo "[!] Cleaning workspace..."
-	if exist $(TARGET) del $(TARGET)
+	@if exist $(TARGET) del $(TARGET) [cite: 2]
 	@echo "[+] Workspace cleaned."
 
 .PHONY: all clean

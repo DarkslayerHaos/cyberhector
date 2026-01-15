@@ -102,7 +102,7 @@ namespace FileOps
 
                 if (Config::REMOVE_ORIGINAL_FILES)
                     fs::remove(entry.path());
-                std::cout << "[+] Protected: " << entry.path().filename() << "\n";
+                std::cout << "[+] Encrypted: " << entry.path().filename() << "\n";
             }
             catch (const std::exception &e)
             {
@@ -135,7 +135,7 @@ namespace FileOps
                 write_file(outPath, plain);
 
                 fs::remove(entry.path());
-                std::cout << "[+] Restored: " << outPath.filename() << "\n";
+                std::cout << "[+] Decrypted: " << outPath.filename() << "\n";
             }
             catch (const std::exception &e)
             {

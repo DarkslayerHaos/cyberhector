@@ -2,31 +2,49 @@
 TARGET = cyberhector.exe
 
 # Source files
-SRCS = main.cpp crypto_core.cpp file_ops.cpp
+SRCS = main.cpp src/crypto_core.cpp src/file_ops.cpp
 
 # Compiler settings
 CXX = g++
 
-# CXXFLAGS updates:
-# -DSODIUM_STATIC: Required when linking libsodium statically
-# -static: Tells the linker to link all libraries statically (no DLL dependencies)
-# -static-libgcc -static-libstdc++: Specifically ensures C/C++ runtimes are embedded
-CXXFLAGS = -std=c++17 -Wall -Wextra -O3 -DSODIUM_STATIC -static -static-libgcc -static-libstdc++ -s
+# --- PROTECTION & OPTIMIZATION SETTINGS ---
+
+# Basic flags and Libsodium static support
+CXXFLAGS = -std=c++17 -Wall -Wextra -O3 -DSODIUM_STATIC
+
+# Aggressive Anti-Reversing & Optimization
+# These flags hinder code flow analysis and remove metadata 
+CXXFLAGS += \
+	-fomit-frame-pointer \
+	-fno-unwind-tables \
+	-finline-functions \
+	-finline-small-functions \
+	-fipa-pta \
+	-fipa-cp \
+	-fipa-sra \
+	-fvisibility=hidden
+
+# Linker flags for a stripped, standalone binary
+# -Wl,--gc-sections: Removes unused code
+# -Wl,--strip-all: Removes all symbols and debug info
+LDFLAGS = -static -static-libgcc -static-libstdc++ \
+          -Wl,--gc-sections \
+          -Wl,--strip-all \
+          -s 
 
 # External libraries
-# The linker will now look for libsodium.a instead of libsodium.dll.a due to the -static flag
 LIBS = -lsodium -lpthread
 
-# Default target
+# --- BUILD TARGETS ---
+
 all:
 	@echo "[!] Building standalone $(TARGET)..."
-	$(CXX) $(SRCS) -o $(TARGET) $(CXXFLAGS) $(LIBS)
+	$(CXX) $(SRCS) -o $(TARGET) $(CXXFLAGS) $(LDFLAGS) $(LIBS)
 	@echo "[+] Build successful."
 
-# Clean target
 clean:
 	@echo "[!] Cleaning workspace..."
-	if exist $(TARGET) del $(TARGET)
+	@if exist $(TARGET) del $(TARGET) [cite: 2]
 	@echo "[+] Workspace cleaned."
 
 .PHONY: all clean

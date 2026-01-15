@@ -8,7 +8,7 @@
 #include <string>
 #include <sodium.h>
 #include <filesystem>
-#include "config.hpp"
+#include "src/config.hpp"
 
 namespace fs = std::filesystem;
 

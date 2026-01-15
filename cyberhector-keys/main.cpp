@@ -21,7 +21,6 @@ int main()
     if (sodium_init() < 0)
         return 1;
 
-    // Strings matched to main.py: main()
     std::cout << "\n--- CyberHector Key Utility (C++) ---\n";
     std::cout << "[1] Unwrap Key Capsule (Decrypts .ewk)\n";
     std::cout << "[2] Generate New X25519 Key Pair (Console Output)\n";
