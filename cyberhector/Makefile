@@ -10,7 +10,7 @@ CXX = g++
 # --- PROTECTION & OPTIMIZATION SETTINGS ---
 
 # Basic flags and Libsodium static support
-CXXFLAGS = -std=c++17 -Wall -Wextra -O3 -DSODIUM_STATIC
+CXXFLAGS = -std=c++20 -Wall -Wextra -O3 -DSODIUM_STATIC
 
 # Aggressive Anti-Reversing & Optimization
 # These flags hinder code flow analysis and remove metadata 

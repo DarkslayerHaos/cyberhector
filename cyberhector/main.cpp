@@ -44,7 +44,7 @@ int main()
     }
 
     std::cout << "\n--- CyberHector File Encryption Utility ---\n";
-    std::cout << "[1] Encrypt files (Generates " << Config::EWK_FILENAME << ")\n";
+    std::cout << "[1] Encrypt files (In " << Config::TARGET_DIR << " only.)\n";
     std::cout << "[2] Decrypt files (Requires unwrapped " << Config::EWK_FILENAME << ")\n";
     std::cout << "Select an option: ";
 

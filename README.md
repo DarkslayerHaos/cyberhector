@@ -90,7 +90,7 @@ Used for:
 - Secure random number generation (`randombytes_buf`).
 - Constant-time memory zeroing (`sodium_memzero`).
 
-### 🧩 C++17 Standard Library
+### 🧩 C++20 Standard Library
 Required for:
 - Filesystem operations (`std::filesystem`) to process directories and extensions.
 - Binary data management using `std::vector<unsigned char>`.
