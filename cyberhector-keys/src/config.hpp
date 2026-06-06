@@ -22,9 +22,9 @@ namespace Config
     const std::string PRIVATE_KEY_FILENAME = "cyberhector.key";
     
     // Crypto constants (Protocol Sync)
+    const std::string INFO = "CyberHector-KeyDerivation";
     const std::string MAGIC = "HECSPEC0";
     const unsigned char VERSION = 0x01;
-    const std::string INFO = "CyberHector-KeyDerivation";
 }
 
 #endif

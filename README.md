@@ -34,11 +34,11 @@ Designed for offline, single-user usage with strong cryptographic guarantees.
 
 ---
 
-## 🔧 HKDF-SHA512 Key Derivation
+## 🔧 HKDF-Blake2b Key Derivation
 Derives the wrapping key from the ECDH shared secret using:
 
 - **HKDF (Extract + Expand)**  
-- **SHA512 HMAC**
+- **Blake2b HMAC**
 
 Provides strong diffusion, collision resistance, and resilience against length-extension issues.
 
@@ -86,7 +86,7 @@ Not intended as a general-purpose or commercial encryption product.
 Used for:
 - **X25519** (Curve25519) ECDH Key Exchange.
 - **XChaCha20-Poly1305** Authenticated Encryption (IETF variant).
-- **HMAC-SHA512** primitives for HKDF-SHA512 derivation.
+- **HMAC-Blake2b** primitives for HKDF-Blake2b derivation.
 - Secure random number generation (`randombytes_buf`).
 - Constant-time memory zeroing (`sodium_memzero`).
 

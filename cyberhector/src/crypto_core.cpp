@@ -17,37 +17,35 @@
 namespace CryptoCore
 {
     /**
-     * Updated helper: HKDF-SHA512 (Extract and Expand).
-     * Synchronized with Python's HKDF(algorithm=hashes.SHA512()).
+     * Manual HKDF implementation using BLAKE2b as the hash primitive.
+     * Matches standard Extract-and-Expand design patterns.
      */
-    void derive_hkdf_sha512(unsigned char *okm, size_t okm_len,
-                            const unsigned char *ikm, size_t ikm_len,
-                            const unsigned char *salt, size_t salt_len,
-                            const std::string &info)
+    void derive_hkdf_blake2b(unsigned char *okm, size_t okm_len,
+                             const unsigned char *ikm, size_t ikm_len,
+                             const unsigned char *salt, size_t salt_len,
+                             const std::string &info)
     {
-        unsigned char prk[64]; // SHA512 output size is 64 bytes
+        // BLAKE2b maximum output hash size is 64 bytes (crypto_generichash_BYTES_MAX)
+        unsigned char prk[64];
 
-        // 1. HKDF-Extract: HMAC-SHA512(salt, ikm)
-        crypto_auth_hmacsha512_state state;
-        crypto_auth_hmacsha512_init(&state, salt, salt_len);
-        crypto_auth_hmacsha512_update(&state, ikm, ikm_len);
-        crypto_auth_hmacsha512_final(&state, prk);
+        // 1. HKDF-Extract: Keyed hash using the salt as the key over the IKM payload
+        crypto_generichash_blake2b(prk, sizeof(prk), ikm, ikm_len, salt, salt_len);
 
-        // 2. HKDF-Expand: HMAC-SHA512(PRK, info | 0x01)
-        // Since we only need 32 bytes (okm_len), we only perform one iteration.
-        crypto_auth_hmacsha512_init(&state, prk, sizeof(prk));
-        crypto_auth_hmacsha512_update(&state, (const unsigned char *)info.c_str(), info.length());
+        // 2. HKDF-Expand: Keyed hash using the generated PRK over info | counter
+        crypto_generichash_blake2b_state state;
+        crypto_generichash_blake2b_init(&state, prk, sizeof(prk), sizeof(prk));
+        crypto_generichash_blake2b_update(&state, (const unsigned char *)info.c_str(), info.length());
 
-        unsigned char counter = 0x01; // RFC 5869 counter
-        crypto_auth_hmacsha512_update(&state, &counter, 1);
+        unsigned char counter = 0x01; // Standard RFC iteration counter
+        crypto_generichash_blake2b_update(&state, &counter, 1);
 
         unsigned char full_output[64];
-        crypto_auth_hmacsha512_final(&state, full_output);
+        crypto_generichash_blake2b_final(&state, full_output, sizeof(full_output));
 
-        // Copy resulting key material to output buffer
+        // Copy required key size (32 bytes) to output destination container
         std::memcpy(okm, full_output, okm_len);
 
-        // Cleanup
+        // Secure context zeroing
         sodium_memzero(prk, sizeof(prk));
         sodium_memzero(full_output, sizeof(full_output));
     }
@@ -92,11 +90,13 @@ namespace CryptoCore
             throw std::runtime_error("ECDH failed: Invalid public key.");
         }
 
-        // 4. HKDF Key Derivation
+        // 4. HKDF Key Derivation using BLAKE2b
         unsigned char salt[12];
         randombytes_buf(salt, 12);
         unsigned char wrapping_key[32];
-        derive_hkdf_sha512(wrapping_key, 32, shared, 32, salt, 12, Config::INFO);
+
+        // Swapped target function call here
+        derive_hkdf_blake2b(wrapping_key, 32, shared, 32, salt, 12, Config::INFO);
 
         // 5. AEAD Encryption Setup
         unsigned char nonce[24];

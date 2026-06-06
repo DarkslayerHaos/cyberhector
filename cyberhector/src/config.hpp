@@ -21,9 +21,9 @@ namespace Config
     const bool REMOVE_ORIGINAL_FILES = false;
     
     // Crypto Metadata (Header)
+    const std::string INFO = "CyberHector-KeyDerivation";
     const std::string MAGIC = "HECSPEC0";
     const unsigned char VERSION = 0x01;
-    const std::string INFO = "CyberHector-KeyDerivation";
     
     // Maximum file size allowed for encryption/decryption (20 GB).
     const unsigned long long MAX_FILE_SIZE_BYTES = 20ULL * 1024 * 1024 * 1024;
