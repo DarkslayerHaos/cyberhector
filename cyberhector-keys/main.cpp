@@ -1,6 +1,6 @@
 /**
  * @file main.cpp
- * @brief Entry point for the CyberHector Key Utility.
+ * @brief Entry point for the CyberHector Key Utility (ML-KEM Migration).
  */
 
 #include <iostream>
@@ -10,9 +10,9 @@
 // Forward declarations
 namespace KeyPairUtils
 {
-    /** @brief Generates and displays a new X25519 keypair. */
-    void generate_x25519_keypair();
-    /** @brief Decrypts the session key file using the configured private key. */
+    /** @brief Generates and displays a new ML-KEM keypair. */
+    void generate_ml_kem_keypair();
+    /** @brief Decrypts the session key file using the configured Kyber private key. */
     void decrypt_wrapped_key_action();
 }
 
@@ -21,15 +21,14 @@ int main()
     if (sodium_init() < 0)
         return 1;
 
-    std::cout << "\n--- CyberHector Key Utility (C++) ---\n";
+    std::cout << "\n--- CyberHector Key Utility ---\n";
     std::cout << "[1] Unwrap Key Capsule (Decrypts .ewk)\n";
-    std::cout << "[2] Generate New X25519 Key Pair (Console Output)\n";
+    std::cout << "[2] Generate New ML-KEM Key Pair\n";
 
     std::cout << "Select an option: ";
     std::string choice;
     std::getline(std::cin, choice);
 
-    // Basic string normalization to mimic Python's .strip().lower()
     if (!choice.empty() && choice.back() == '\r')
         choice.pop_back();
 
@@ -39,7 +38,7 @@ int main()
     }
     else if (choice == "2")
     {
-        KeyPairUtils::generate_x25519_keypair();
+        KeyPairUtils::generate_ml_kem_keypair();
     }
     else
     {

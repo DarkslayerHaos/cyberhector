@@ -33,7 +33,7 @@ LDFLAGS = -static -static-libgcc -static-libstdc++ \
           -s 
 
 # External libraries
-LIBS = -lsodium -lpthread
+LIBS = -lcrypto -lws2_32 -lcrypt32 -lsodium -lpthread
 
 # --- BUILD TARGETS ---
 

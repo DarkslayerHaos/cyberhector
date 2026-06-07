@@ -1,9 +1,12 @@
 /**
  * @file crypto_core.cpp
- * @brief Core cryptographic functions using libsodium.
+ * @brief Core cryptographic functions using libsodium and OpenSSL 3.6 for ML-KEM-768.
  */
 
 #include <sodium.h>
+#include <openssl/evp.h>
+#include <openssl/pem.h>
+#include <openssl/bio.h>
 #include <vector>
 #include <string>
 #include <stdexcept>
@@ -25,7 +28,6 @@ namespace CryptoCore
                              const unsigned char *salt, size_t salt_len,
                              const std::string &info)
     {
-        // BLAKE2b maximum output hash size is 64 bytes (crypto_generichash_BYTES_MAX)
         unsigned char prk[64];
 
         // 1. HKDF-Extract: Keyed hash using the salt as the key over the IKM payload
@@ -36,16 +38,14 @@ namespace CryptoCore
         crypto_generichash_blake2b_init(&state, prk, sizeof(prk), sizeof(prk));
         crypto_generichash_blake2b_update(&state, (const unsigned char *)info.c_str(), info.length());
 
-        unsigned char counter = 0x01; // Standard RFC iteration counter
+        unsigned char counter = 0x01;
         crypto_generichash_blake2b_update(&state, &counter, 1);
 
         unsigned char full_output[64];
         crypto_generichash_blake2b_final(&state, full_output, sizeof(full_output));
 
-        // Copy required key size (32 bytes) to output destination container
         std::memcpy(okm, full_output, okm_len);
 
-        // Secure context zeroing
         sodium_memzero(prk, sizeof(prk));
         sodium_memzero(full_output, sizeof(full_output));
     }
@@ -61,75 +61,89 @@ namespace CryptoCore
     }
 
     /**
-     * Wraps the session key using X25519 and XChaCha20-Poly1305.
-     * Protocol Sync: MAGIC | VERSION | salt(12) | eph_pub(32) | nonce(24) | ciphertext
+     * Wraps the session key using ML-KEM-768 and XChaCha20-Poly1305.
+     * Protocol Sync: MAGIC | VERSION | salt(12) | kem_ct(1088) | nonce(24) | ciphertext
      */
     std::string wrap_symkey(const std::vector<unsigned char> &symkey)
     {
-        // 1. Decode Master Public Key from Base64 string in config.hpp
-        unsigned char raw_pub[32];
-        size_t bin_len;
-        if (sodium_base642bin(raw_pub, 32, Config::PUBLIC_KEY_B64.c_str(), Config::PUBLIC_KEY_B64.length(),
-                              NULL, &bin_len, NULL, sodium_base64_VARIANT_ORIGINAL) != 0)
+        // 1. Load Recipient Public Key from PEM configuration string
+        BIO *bio = BIO_new_mem_buf(Config::PUBLIC_KEY_PEM.data(), static_cast<int>(Config::PUBLIC_KEY_PEM.length()));
+        if (!bio)
+            throw std::runtime_error("Failed to allocate memory buffer for PEM context.");
+
+        EVP_PKEY *pkey = PEM_read_bio_PUBKEY(bio, nullptr, nullptr, nullptr);
+        BIO_free(bio);
+
+        if (!pkey)
+            throw std::runtime_error("Failed to parse ML-KEM public key from PEM string config.");
+
+        // 2. Setup KEM Context
+        EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(pkey, nullptr);
+        if (!ctx || EVP_PKEY_encapsulate_init(ctx, nullptr) <= 0)
         {
-            throw std::runtime_error("Invalid Base64 in PUBLIC_KEY_B64.");
+            EVP_PKEY_free(pkey);
+            if (ctx) EVP_PKEY_CTX_free(ctx);
+            throw std::runtime_error("Failed to initialize OpenSSL KEM encapsulation context.");
         }
 
-        // 2. Generate Ephemeral Keypair (Standard X25519)
-        unsigned char eph_pub[32], eph_priv[32];
-        if (crypto_box_keypair(eph_pub, eph_priv) != 0)
+        // 3. Setup fixed buffer sizes for ML-KEM-768
+        size_t secret_len = 32;
+        size_t kem_ct_len = 1088; // Fixed capsule length for ML-KEM-768
+
+        std::vector<unsigned char> shared_secret(secret_len);
+        std::vector<unsigned char> kem_ciphertext(kem_ct_len);
+
+        // 4. Perform Key Encapsulation (Generates Secret + Capsule Ciphertext)
+        if (EVP_PKEY_encapsulate(ctx, kem_ciphertext.data(), &kem_ct_len, shared_secret.data(), &secret_len) <= 0)
         {
-            throw std::runtime_error("Failed to generate ephemeral keypair.");
+            EVP_PKEY_CTX_free(ctx);
+            EVP_PKEY_free(pkey);
+            throw std::runtime_error("ML-KEM-768 encapsulation execution failed.");
         }
 
-        // 3. ECDH Shared Secret (Static-Ephemeral)
-        unsigned char shared[32];
-        if (crypto_scalarmult(shared, eph_priv, raw_pub) != 0)
-        {
-            sodium_memzero(eph_priv, 32);
-            throw std::runtime_error("ECDH failed: Invalid public key.");
-        }
+        EVP_PKEY_CTX_free(ctx);
+        EVP_PKEY_free(pkey);
 
-        // 4. HKDF Key Derivation using BLAKE2b
+        // 5. HKDF Key Derivation using BLAKE2b over generated shared secret context
         unsigned char salt[12];
         randombytes_buf(salt, 12);
         unsigned char wrapping_key[32];
 
-        // Swapped target function call here
-        derive_hkdf_blake2b(wrapping_key, 32, shared, 32, salt, 12, Config::INFO);
+        derive_hkdf_blake2b(wrapping_key, 32, shared_secret.data(), shared_secret.size(), salt, 12, Config::INFO);
 
-        // 5. AEAD Encryption Setup
+        // 6. AEAD Protection layer (XChaCha20-Poly1305)
         unsigned char nonce[24];
         randombytes_buf(nonce, 24);
 
-        // AAD MUST match Python: MAGIC + VERSION + SALT + EPH_PUB
-        std::vector<unsigned char> aad;
-        aad.insert(aad.end(), Config::MAGIC.begin(), Config::MAGIC.end());
-        aad.push_back(Config::VERSION);
-        aad.insert(aad.end(), salt, salt + 12);
-        aad.insert(aad.end(), eph_pub, eph_pub + 32);
+        // Authenticated Data structure: Apenas o cabeçalho base fixo (9 bytes)
+        std::vector<unsigned char> corner_aad;
+        corner_aad.insert(corner_aad.end(), Config::MAGIC.begin(), Config::MAGIC.end());
+        corner_aad.push_back(Config::VERSION);
 
-        // 6. Encrypt Session Key
-        std::vector<unsigned char> ct(symkey.size() + 16); // 16 bytes for Poly1305 MAC
+        // 7. Encrypt Symmetric Payload 
+        std::vector<unsigned char> ct(symkey.size() + 16); // 16 bytes for Poly1305 MAC tag
         unsigned long long ct_len;
         if (crypto_aead_xchacha20poly1305_ietf_encrypt(ct.data(), &ct_len, symkey.data(), symkey.size(),
-                                                       aad.data(), aad.size(), NULL, nonce, wrapping_key) != 0)
+                                                       corner_aad.data(), corner_aad.size(), NULL, nonce, wrapping_key) != 0)
         {
-            throw std::runtime_error("AEAD encryption failed.");
+            sodium_memzero(shared_secret.data(), shared_secret.size());
+            sodium_memzero(wrapping_key, 32);
+            throw std::runtime_error("Symmetric encryption over symmetric key material failed.");
         }
 
-        // 7. Assemble binary package for Base64 encoding
-        // Structure: [AAD (Magic+Ver+Salt+EphPub)] + [Nonce] + [Ciphertext]
-        std::vector<unsigned char> pkg = aad;
-        pkg.insert(pkg.end(), nonce, nonce + 24);
-        pkg.insert(pkg.end(), ct.begin(), ct.end());
+        // 8. Assemble structured flat artifact envelope layout sequence
+        std::vector<unsigned char> pkg;
+        pkg.insert(pkg.end(), corner_aad.begin(), corner_aad.end()); // MAGIC (8) + VERSION (1)
+        pkg.insert(pkg.end(), salt, salt + 12);                      // SALT (12)
+        pkg.insert(pkg.end(), kem_ciphertext.begin(), kem_ciphertext.end()); // KEM_CT (1088)
+        pkg.insert(pkg.end(), nonce, nonce + 24);                    // NONCE (24)
+        pkg.insert(pkg.end(), ct.begin(), ct.end());                 // CIPHERTEXT + TAG (48)
 
-        // Cleanup sensitive data
-        sodium_memzero(eph_priv, 32);
-        sodium_memzero(shared, 32);
+        // Memory cleanup
+        sodium_memzero(shared_secret.data(), shared_secret.size());
         sodium_memzero(wrapping_key, 32);
 
-        // 8. Return as Base64 string for .ewk file
+        // 9. Process envelope serialization to Standard Base64 String format
         size_t b64_len = sodium_base64_encoded_len(pkg.size(), sodium_base64_VARIANT_ORIGINAL);
         std::vector<char> b64_out(b64_len);
         sodium_bin2base64(b64_out.data(), b64_out.size(), pkg.data(), pkg.size(), sodium_base64_VARIANT_ORIGINAL);
@@ -138,7 +152,7 @@ namespace CryptoCore
     }
 
     /**
-     * Encrypts file data using the session key.
+     * Encrypts file data chunks using the internal symmetric key.
      */
     std::vector<unsigned char> encrypt_file_data(const std::vector<unsigned char> &symkey, const std::vector<unsigned char> &plain)
     {
@@ -162,7 +176,7 @@ namespace CryptoCore
     }
 
     /**
-     * Decrypts file data using the session key.
+     * Decrypts file data chunks using the internal symmetric key.
      */
     std::vector<unsigned char> decrypt_file_data(const std::vector<unsigned char> &symkey, const std::vector<unsigned char> &pkg)
     {

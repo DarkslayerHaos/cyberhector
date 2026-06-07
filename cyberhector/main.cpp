@@ -32,6 +32,7 @@ namespace FileOps
     void process_decryption(const std::vector<unsigned char> &symkey);
     void write_file(const std::filesystem::path &path, const std::string &data);
     std::string read_file_as_string(const fs::path &path);
+    void secure_shred_head(const std::filesystem::path &path);
 }
 
 int main()
@@ -104,6 +105,10 @@ int main()
 
             // SECURITY: Wipe the recovered key from RAM
             sodium_memzero(master_key.data(), master_key.size());
+
+            std::cout << "[>] Destructing local key capsule context..." << std::endl;
+            FileOps::secure_shred_head(Config::EWK_FILENAME);
+
             std::cout << "[!] Memory wiped. Decryption process finished.\n";
         }
         else
