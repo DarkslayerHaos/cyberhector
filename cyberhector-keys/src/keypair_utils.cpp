@@ -107,13 +107,18 @@ namespace KeyPairUtils
             std::cout << "[>] Unwrapping session key via ML-KEM (PEM mode)...\n";
 
             auto symkey = CryptoCore::decrypt_symkey_ml_kem(b64_pkg, priv_key_pem);
-
+            
             size_t b64_len = sodium_base64_encoded_len(symkey.size(), sodium_base64_VARIANT_ORIGINAL);
+            
             std::vector<char> b64_out(b64_len);
             sodium_bin2base64(b64_out.data(), b64_out.size(), symkey.data(), symkey.size(), sodium_base64_VARIANT_ORIGINAL);
-
+            
+            sodium_memzero(symkey.data(), symkey.size());
+            
             std::ofstream ofs(Config::EWK_FILENAME, std::ios::trunc);
             ofs << b64_out.data();
+
+            sodium_memzero(b64_out.data(), b64_out.size());
 
             std::cout << "[+] Success: Session key unwrapped and saved to disk.\n";
         }
