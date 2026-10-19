@@ -70,7 +70,7 @@ namespace KeyPairUtils
         EVP_PKEY_free(pkey);
         EVP_PKEY_CTX_free(ctx);
 
-        std::cout << "\n--- NEW KYBER1024 PEM KEYPAIR GENERATED AND SAVED ---\n";
+        std::cout << "\n--- NEW MK-KEM 1024 PEM KEYPAIR GENERATED AND SAVED ---\n";
         std::cout << "[+] Public key saved to (PEM):  " << Config::PUBLIC_KEY_FILENAME << "\n";
         std::cout << "[+] Private key saved to (PEM): " << Config::PRIVATE_KEY_FILENAME << "\n";
         std::cout << "-----------------------------------------------------\n\n";

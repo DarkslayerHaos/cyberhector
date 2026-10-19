@@ -1,12 +1,13 @@
 /**
  * @file crypto_core.cpp
- * @brief Core cryptographic functions using libsodium and OpenSSL 3.6 for ML-KEM-768.
+ * @brief Core cryptographic functions using libsodium and OpenSSL 3.6 for ML-KEM.
  */
 
 #include <sodium.h>
 #include <openssl/evp.h>
 #include <openssl/pem.h>
 #include <openssl/bio.h>
+#include <openssl/kdf.h>
 #include <vector>
 #include <string>
 #include <stdexcept>
@@ -20,34 +21,38 @@
 namespace CryptoCore
 {
     /**
-     * Manual HKDF implementation using BLAKE2b as the hash primitive.
-     * Matches standard Extract-and-Expand design patterns.
+     * HKDF key derivation using OpenSSL's native EVP_KDF interface with SHA-512.
+     * Implements RFC 5869 Extract-and-Expand in a single call via the built-in provider.
      */
-    void derive_hkdf_blake2b(unsigned char *okm, size_t okm_len,
-                             const unsigned char *ikm, size_t ikm_len,
-                             const unsigned char *salt, size_t salt_len,
-                             const std::string &info)
+    void derive_hkdf(unsigned char *okm, size_t okm_len,
+                     const unsigned char *ikm, size_t ikm_len,
+                     const unsigned char *salt, size_t salt_len,
+                     const std::string &info)
     {
-        unsigned char prk[64];
+        EVP_KDF *kdf = EVP_KDF_fetch(nullptr, "HKDF", nullptr);
+        if (!kdf)
+            throw std::runtime_error("Failed to fetch HKDF from OpenSSL provider.");
 
-        // 1. HKDF-Extract: Keyed hash using the salt as the key over the IKM payload
-        crypto_generichash_blake2b(prk, sizeof(prk), ikm, ikm_len, salt, salt_len);
+        EVP_KDF_CTX *kctx = EVP_KDF_CTX_new(kdf);
+        EVP_KDF_free(kdf);
+        if (!kctx)
+            throw std::runtime_error("Failed to create HKDF context.");
 
-        // 2. HKDF-Expand: Keyed hash using the generated PRK over info | counter
-        crypto_generichash_blake2b_state state;
-        crypto_generichash_blake2b_init(&state, prk, sizeof(prk), sizeof(prk));
-        crypto_generichash_blake2b_update(&state, (const unsigned char *)info.c_str(), info.length());
+        // Build parameter list: digest, key (IKM), salt, info, output length
+        OSSL_PARAM params[] = {
+            OSSL_PARAM_construct_utf8_string("digest", const_cast<char *>("SHA512"), 0),
+            OSSL_PARAM_construct_octet_string("key", const_cast<unsigned char *>(ikm), ikm_len),
+            OSSL_PARAM_construct_octet_string("salt", const_cast<unsigned char *>(salt), salt_len),
+            OSSL_PARAM_construct_octet_string("info", const_cast<unsigned char *>(reinterpret_cast<const unsigned char *>(info.c_str())), info.length()),
+            OSSL_PARAM_END};
 
-        unsigned char counter = 0x01;
-        crypto_generichash_blake2b_update(&state, &counter, 1);
+        if (EVP_KDF_derive(kctx, okm, okm_len, params) <= 0)
+        {
+            EVP_KDF_CTX_free(kctx);
+            throw std::runtime_error("HKDF derivation failed.");
+        }
 
-        unsigned char full_output[64];
-        crypto_generichash_blake2b_final(&state, full_output, sizeof(full_output));
-
-        std::memcpy(okm, full_output, okm_len);
-
-        sodium_memzero(prk, sizeof(prk));
-        sodium_memzero(full_output, sizeof(full_output));
+        EVP_KDF_CTX_free(kctx);
     }
 
     /**
@@ -61,8 +66,8 @@ namespace CryptoCore
     }
 
     /**
-     * Wraps the session key using ML-KEM-768 and XChaCha20-Poly1305.
-     * Protocol Sync: MAGIC | VERSION | salt(12) | kem_ct(1088) | nonce(24) | ciphertext
+     * Wraps the session key using ML-KEM and XChaCha20-Poly1305.
+     * Protocol Sync: MAGIC | VERSION | salt(12) | kem_ct | nonce(24) | ciphertext
      */
     std::string wrap_symkey(const std::vector<unsigned char> &symkey)
     {
@@ -82,13 +87,20 @@ namespace CryptoCore
         if (!ctx || EVP_PKEY_encapsulate_init(ctx, nullptr) <= 0)
         {
             EVP_PKEY_free(pkey);
-            if (ctx) EVP_PKEY_CTX_free(ctx);
+            if (ctx)
+                EVP_PKEY_CTX_free(ctx);
             throw std::runtime_error("Failed to initialize OpenSSL KEM encapsulation context.");
         }
 
-        // 3. Setup fixed buffer sizes for ML-KEM-768
-        size_t secret_len = 32;
-        size_t kem_ct_len = 1088; // Fixed capsule length for ML-KEM-768
+        // 3. Setup fixed buffer sizes for ML-KEM
+        size_t kem_ct_len = 0;
+        size_t secret_len = 0;
+        if (EVP_PKEY_encapsulate(ctx, nullptr, &kem_ct_len, nullptr, &secret_len) <= 0)
+        {
+            EVP_PKEY_CTX_free(ctx);
+            EVP_PKEY_free(pkey);
+            throw std::runtime_error("Failed to query KEM buffer sizes.");
+        }
 
         std::vector<unsigned char> shared_secret(secret_len);
         std::vector<unsigned char> kem_ciphertext(kem_ct_len);
@@ -98,18 +110,18 @@ namespace CryptoCore
         {
             EVP_PKEY_CTX_free(ctx);
             EVP_PKEY_free(pkey);
-            throw std::runtime_error("ML-KEM-768 encapsulation execution failed.");
+            throw std::runtime_error("KEM encapsulation execution failed..");
         }
 
         EVP_PKEY_CTX_free(ctx);
         EVP_PKEY_free(pkey);
 
-        // 5. HKDF Key Derivation using BLAKE2b over generated shared secret context
+        // 5. HKDF-SHA256 key derivation over generated shared secret context
         unsigned char salt[12];
         randombytes_buf(salt, 12);
         unsigned char wrapping_key[32];
 
-        derive_hkdf_blake2b(wrapping_key, 32, shared_secret.data(), shared_secret.size(), salt, 12, Config::INFO);
+        derive_hkdf(wrapping_key, 32, shared_secret.data(), shared_secret.size(), salt, 12, Config::INFO);
 
         // 6. AEAD Protection layer (XChaCha20-Poly1305)
         unsigned char nonce[24];
@@ -120,7 +132,7 @@ namespace CryptoCore
         corner_aad.insert(corner_aad.end(), Config::MAGIC.begin(), Config::MAGIC.end());
         corner_aad.push_back(Config::VERSION);
 
-        // 7. Encrypt Symmetric Payload 
+        // 7. Encrypt Symmetric Payload
         std::vector<unsigned char> ct(symkey.size() + 16); // 16 bytes for Poly1305 MAC tag
         unsigned long long ct_len;
         if (crypto_aead_xchacha20poly1305_ietf_encrypt(ct.data(), &ct_len, symkey.data(), symkey.size(),
@@ -133,11 +145,11 @@ namespace CryptoCore
 
         // 8. Assemble structured flat artifact envelope layout sequence
         std::vector<unsigned char> pkg;
-        pkg.insert(pkg.end(), corner_aad.begin(), corner_aad.end()); // MAGIC (8) + VERSION (1)
-        pkg.insert(pkg.end(), salt, salt + 12);                      // SALT (12)
-        pkg.insert(pkg.end(), kem_ciphertext.begin(), kem_ciphertext.end()); // KEM_CT (1088)
-        pkg.insert(pkg.end(), nonce, nonce + 24);                    // NONCE (24)
-        pkg.insert(pkg.end(), ct.begin(), ct.end());                 // CIPHERTEXT + TAG (48)
+        pkg.insert(pkg.end(), corner_aad.begin(), corner_aad.end());         // MAGIC (8) + VERSION (1)
+        pkg.insert(pkg.end(), salt, salt + 12);                              // SALT (12)
+        pkg.insert(pkg.end(), kem_ciphertext.begin(), kem_ciphertext.end()); // KEM_CT
+        pkg.insert(pkg.end(), nonce, nonce + 24);                            // NONCE (24)
+        pkg.insert(pkg.end(), ct.begin(), ct.end());                         // CIPHERTEXT + TAG (48)
 
         // Memory cleanup
         sodium_memzero(shared_secret.data(), shared_secret.size());

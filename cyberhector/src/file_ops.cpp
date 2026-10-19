@@ -49,8 +49,8 @@ namespace FileOps
         if (!file.is_open())
             throw std::runtime_error("Cannot open file for secure shredding: " + path.string());
 
-        // Target only the first 4KB (4096 bytes) or less if the file is smaller
-        unsigned long long overwrite_size = std::min(file_size, static_cast<unsigned long long>(4096));
+        // Target only the first 2MB or less if the file is smaller
+        unsigned long long overwrite_size = std::min(file_size, static_cast<unsigned long long>(2 * 1024 * 1024));
         std::vector<unsigned char> shred_buf(overwrite_size);
 
         // Generate cryptographically secure random bytes using libsodium

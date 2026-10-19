@@ -27,7 +27,7 @@ namespace Config
     const unsigned char VERSION = 0x01;
 
     // OpenSSL Alg Name for ML-KEM
-    const std::string KEM_ALGORITHM = "ML-KEM-768";
+    const std::string KEM_ALGORITHM = "ML-KEM-1024";
 }
 
 #endif
