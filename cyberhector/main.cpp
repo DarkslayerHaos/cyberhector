@@ -59,7 +59,7 @@ int main()
             /**
              * ENCRYPTION FLOW:
              * 1. Generate a high-entropy 32-byte master session key.
-             * 2. Wrap (Encapsulate) this key using X25519 (Recipient's Public Key).
+             * 2. Wrap (Encapsulate) this key using MK-KEM (Recipient's Public Key).
              * 3. Save the capsule to disk and process all files in the target directory.
              */
             std::cout << "\n[>] Generating session keys..." << std::endl;

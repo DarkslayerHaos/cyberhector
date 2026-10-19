@@ -12,7 +12,7 @@ namespace KeyPairUtils
 {
     /** @brief Generates and displays a new ML-KEM keypair. */
     void generate_ml_kem_keypair();
-    /** @brief Decrypts the session key file using the configured Kyber private key. */
+    /** @brief Decrypts the session key file using the configured ML-KEM private key. */
     void decrypt_wrapped_key_action();
 }
 
