@@ -19,7 +19,9 @@ namespace KeyPairUtils
 int main()
 {
     if (sodium_init() < 0)
+    {
         return 1;
+    }
 
     std::cout << "\n--- CyberHector Key Utility ---\n";
     std::cout << "[1] Unwrap Key Capsule (Decrypts .ewk)\n";
@@ -30,7 +32,9 @@ int main()
     std::getline(std::cin, choice);
 
     if (!choice.empty() && choice.back() == '\r')
+    {
         choice.pop_back();
+    }
 
     if (choice == "1")
     {

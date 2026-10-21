@@ -24,19 +24,20 @@ namespace CryptoCore
      * HKDF key derivation using OpenSSL's native EVP_KDF interface with SHA-512.
      * Implements RFC 5869 Extract-and-Expand in a single call via the built-in provider.
      */
-    void derive_hkdf(unsigned char *okm, size_t okm_len,
-                     const unsigned char *ikm, size_t ikm_len,
-                     const unsigned char *salt, size_t salt_len,
-                     const std::string &info)
+    void derive_hkdf(unsigned char *okm, size_t okm_len, const unsigned char *ikm, size_t ikm_len, const unsigned char *salt, size_t salt_len, const std::string &info)
     {
         EVP_KDF *kdf = EVP_KDF_fetch(nullptr, "HKDF", nullptr);
         if (!kdf)
+        {
             throw std::runtime_error("Failed to fetch HKDF from OpenSSL provider.");
+        }
 
         EVP_KDF_CTX *kctx = EVP_KDF_CTX_new(kdf);
         EVP_KDF_free(kdf);
         if (!kctx)
+        {
             throw std::runtime_error("Failed to create HKDF context.");
+        }
 
         // Build parameter list: digest, key (IKM), salt, info, output length
         OSSL_PARAM params[] = {
@@ -74,13 +75,17 @@ namespace CryptoCore
         // 1. Load Recipient Public Key from PEM configuration string
         BIO *bio = BIO_new_mem_buf(Config::PUBLIC_KEY_PEM.data(), static_cast<int>(Config::PUBLIC_KEY_PEM.length()));
         if (!bio)
+        {
             throw std::runtime_error("Failed to allocate memory buffer for PEM context.");
+        }
 
         EVP_PKEY *pkey = PEM_read_bio_PUBKEY(bio, nullptr, nullptr, nullptr);
         BIO_free(bio);
 
         if (!pkey)
+        {
             throw std::runtime_error("Failed to parse ML-KEM public key from PEM string config.");
+        }
 
         // 2. Setup KEM Context
         EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(pkey, nullptr);
@@ -88,7 +93,9 @@ namespace CryptoCore
         {
             EVP_PKEY_free(pkey);
             if (ctx)
+            {
                 EVP_PKEY_CTX_free(ctx);
+            }
             throw std::runtime_error("Failed to initialize OpenSSL KEM encapsulation context.");
         }
 
@@ -116,7 +123,7 @@ namespace CryptoCore
         EVP_PKEY_CTX_free(ctx);
         EVP_PKEY_free(pkey);
 
-        // 5. HKDF-SHA256 key derivation over generated shared secret context
+        // 5. HKDF-SHA512 key derivation over generated shared secret context
         unsigned char salt[12];
         randombytes_buf(salt, 12);
         unsigned char wrapping_key[32];
@@ -135,8 +142,7 @@ namespace CryptoCore
         // 7. Encrypt Symmetric Payload
         std::vector<unsigned char> ct(symkey.size() + 16); // 16 bytes for Poly1305 MAC tag
         unsigned long long ct_len;
-        if (crypto_aead_xchacha20poly1305_ietf_encrypt(ct.data(), &ct_len, symkey.data(), symkey.size(),
-                                                       corner_aad.data(), corner_aad.size(), NULL, nonce, wrapping_key) != 0)
+        if (crypto_aead_xchacha20poly1305_ietf_encrypt(ct.data(), &ct_len, symkey.data(), symkey.size(), corner_aad.data(), corner_aad.size(), NULL, nonce, wrapping_key) != 0)
         {
             sodium_memzero(shared_secret.data(), shared_secret.size());
             sodium_memzero(wrapping_key, 32);
@@ -180,8 +186,7 @@ namespace CryptoCore
 
         std::vector<unsigned char> ct(plain.size() + 16);
         unsigned long long ct_len;
-        crypto_aead_xchacha20poly1305_ietf_encrypt(ct.data(), &ct_len, plain.data(), plain.size(),
-                                                   aad.data(), aad.size(), NULL, nonce, symkey.data());
+        crypto_aead_xchacha20poly1305_ietf_encrypt(ct.data(), &ct_len, plain.data(), plain.size(), aad.data(), aad.size(), NULL, nonce, symkey.data());
 
         pkg.insert(pkg.end(), ct.begin(), ct.end());
         return pkg;
@@ -194,8 +199,9 @@ namespace CryptoCore
     {
         size_t header_len = Config::MAGIC.length() + 1;
         if (pkg.size() < (header_len + 24 + 16))
+        {
             throw std::runtime_error("Corrupted file package.");
-
+        }
         const unsigned char *nonce = pkg.data() + header_len;
         const unsigned char *ct = nonce + 24;
         size_t ct_len = pkg.size() - header_len - 24;
@@ -204,8 +210,7 @@ namespace CryptoCore
         std::vector<unsigned char> pt(ct_len - 16);
         unsigned long long pt_len;
 
-        if (crypto_aead_xchacha20poly1305_ietf_decrypt(pt.data(), &pt_len, NULL, ct, ct_len,
-                                                       aad.data(), aad.size(), nonce, symkey.data()) != 0)
+        if (crypto_aead_xchacha20poly1305_ietf_decrypt(pt.data(), &pt_len, NULL, ct, ct_len, aad.data(), aad.size(), nonce, symkey.data()) != 0)
         {
             throw std::runtime_error("File decryption failed: Auth error.");
         }

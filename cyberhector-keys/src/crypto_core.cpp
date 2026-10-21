@@ -22,12 +22,17 @@ namespace CryptoCore
     {
         EVP_KDF *kdf = EVP_KDF_fetch(nullptr, "HKDF", nullptr);
         if (!kdf)
+        {
             throw std::runtime_error("Failed to fetch HKDF from OpenSSL provider.");
+        }
 
         EVP_KDF_CTX *kctx = EVP_KDF_CTX_new(kdf);
         EVP_KDF_free(kdf);
+
         if (!kctx)
+        {
             throw std::runtime_error("Failed to create HKDF context.");
+        }
 
         // Build parameter list: digest, key (IKM), salt, info, output length
         OSSL_PARAM params[] = {
@@ -57,14 +62,18 @@ namespace CryptoCore
         std::vector<unsigned char> pkg(b64_pkg.length());
         size_t pkg_len;
         if (sodium_base642bin(pkg.data(), pkg.size(), b64_pkg.c_str(), b64_pkg.length(), NULL, &pkg_len, NULL, sodium_base64_VARIANT_ORIGINAL) != 0)
+        {
             throw std::runtime_error("Invalid Base64 capsule.");
+        }
 
         pkg.resize(pkg_len);
 
         // 2. Load Private Key early so we can query KEM sizes before slicing the package
         BIO *bio = BIO_new_mem_buf(pem_priv_key.data(), static_cast<int>(pem_priv_key.length()));
         if (!bio)
+        {
             throw std::runtime_error("Failed to allocate memory buffer for private PEM context.");
+        }
 
         // Allocate a secure local buffer for the passphrase
         char password_buf[256];
@@ -97,7 +106,9 @@ namespace CryptoCore
         {
             EVP_PKEY_free(pkey);
             if (ctx)
+            {
                 EVP_PKEY_CTX_free(ctx);
+            }
             throw std::runtime_error("Failed to initialize OpenSSL KEM decapsulation context.");
         }
 
@@ -111,7 +122,9 @@ namespace CryptoCore
         size_t header_len = Config::MAGIC.length() + 1; // MAGIC (8) + VERSION (1)
 
         if (pkg_len < (header_len + 12 + kem_ct_len + 24 + 16))
+        {
             throw std::runtime_error("Corrupted key capsule structural payload footprint.");
+        }
 
         // 6. Exact Pointer Math Offset Slicing
         const unsigned char *salt = pkg.data() + header_len;
@@ -132,7 +145,7 @@ namespace CryptoCore
         EVP_PKEY_CTX_free(ctx);
         EVP_PKEY_free(pkey);
 
-        // 8. Re-derive wrapping key material using OpenSSL native HKDF-SHA256
+        // 8. Re-derive wrapping key material using OpenSSL native HKDF-SHA512
         unsigned char wrapping_key[32];
         derive_hkdf(wrapping_key, 32, shared.data(), shared.size(), salt, 12, Config::INFO);
 

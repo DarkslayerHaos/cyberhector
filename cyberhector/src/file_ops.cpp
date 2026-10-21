@@ -29,7 +29,7 @@ namespace FileOps
     const size_t CHUNK_SIZE = 4 * 1024 * 1024;
 
     /**
-     * @brief Corrupts the first 4KB of a file with random bytes before deleting it.
+     * @brief Corrupts the first 2mb of a file with random bytes before deleting it.
      * @param path The path to the file to be securely shredded.
      */
     void secure_shred_head(const fs::path &path)

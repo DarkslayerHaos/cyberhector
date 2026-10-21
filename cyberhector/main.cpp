@@ -84,8 +84,9 @@ int main()
              * 3. Use the recovered key to decrypt file contents.
              */
             if (!fs::exists(Config::EWK_FILENAME))
+            {
                 throw std::runtime_error("Key capsule file (" + Config::EWK_FILENAME + ") missing!");
-
+            }
             std::cout << "\n[>] Reading session key from capsule..." << std::endl;
             std::string b64_key = FileOps::read_file_as_string(Config::EWK_FILENAME);
 
@@ -94,11 +95,10 @@ int main()
             size_t decoded_len;
 
             // Decode the "unwrapped" key back to binary
-            if (sodium_base642bin(master_key.data(), master_key.size(), b64_key.c_str(), b64_key.length(),
-                                  NULL, &decoded_len, NULL, sodium_base64_VARIANT_ORIGINAL) != 0)
+            if (sodium_base642bin(master_key.data(), master_key.size(), b64_key.c_str(), b64_key.length(), NULL, &decoded_len, NULL, sodium_base64_VARIANT_ORIGINAL) != 0)
             {
                 sodium_memzero(master_key.data(), master_key.size());
-                throw std::runtime_error("Failed to decode key: Check if the .ewk was properly unwrapped.");
+                throw std::runtime_error("Failed to decode key: Check if the " + Config::EWK_FILENAME + " was properly unwrapped.");
             }
 
             FileOps::process_decryption(master_key);
