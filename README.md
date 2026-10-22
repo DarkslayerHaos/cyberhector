@@ -46,7 +46,7 @@ This separation means the private key never has to sit next to the files it prot
 | Max file size | 20 GB |
 | Chunk size | 4 MB |
 
-Files are matched by the configured constants in `src/config.hpp`, not hardcoded — changing the target directory, extension, or key filename only requires editing that file.
+Files are matched by the configured constants in `src/config.hpp`— changing the target directory, extension, or key filename only requires editing that file.
 
 ### Secure deletion
 
